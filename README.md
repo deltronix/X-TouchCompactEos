@@ -10,9 +10,9 @@ Just a little script I made :) Of course usage is entirely at your own risk.
  - Start the ETC Eos software and enjoy this physical interface
 
 ## Mapping:
-By default the X-Touch is mapped as described below. 
+By default the X-Touch is mapped as described below. Do keep in mind that this script fires Macro 811 - 818 when changing fader pages! I use this to switch views in a magic sheet that displays the fader contents
 
- > !IMPORTANT Do not use Bank B! It is not finished and behaviour is not necessarily defined. If you implement some useful behaviour for Bank B feel free to submit it as a pull request though :) The issue is mostly that bank changes are not reported through MIDI. As a work around I now periodically update at least the fader positions (which are the same as Bank A for now). 
+ > !IMPORTANT Do not use Bank B! It is not finished and behaviour is not necessarily defined. If you implement some useful behaviour for Bank B feel free to submit it as a pull request though :) The issue is mostly that bank changes are not reported through MIDI. As a work around I now periodically update at least the fader positions (which are the same as Bank A for now).
 
 ### Buttons:
  - Button row 1 is mapped to Macro 801-808
