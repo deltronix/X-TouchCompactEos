@@ -1,0 +1,382 @@
+/* OSCII-bot script for interfacing between Behringer X-Touch devices and ETC Eos software
+Copyright (C) 2025 deltronix
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+@input x-touch MIDI "X-TOUCH"
+@input eos-fb OSC "127.0.0.1:8001"
+@output eos OSC "127.0.0.1:8000"
+@output x-touch-fb MIDI "X-TOUCH"
+@init
+  
+// ######## Midi message constants ########
+midi_note_off = $x80; // 128
+midi_note_on = $x90; // 144
+midi_poly_pressure = $xA0; // 160
+midi_control_change = $xB0; // 176
+midi_program_change = $xC0; // 192
+midi_channel_pressure = $xD0; // 208
+midi_pitch_bend = $xE0; // 224
+midi_system = $xF0; // 240
+
+// ######## Define some functions ########
+function send_note_on(midi_channel, i, data)(
+	msg1 = midi_channel + midi_note_on;
+	msg2 = i;
+	msg3 = data;
+	//printf("midi_tx note on: [%x][%d][%d]\n",msg1,msg2,msg3);
+	midisend(-1);
+);
+function send_cc(midi_channel, i, data)(
+	msg1 = (midi_channel - 1) + midi_control_change;
+	msg2 = i;
+	msg3 = data;
+	//printf("midi_tx cc: [%x][%d][%d]\n",msg1,msg2,msg3);
+	midisend(-1);
+);
+function send_program_change(midi_channel, data)(
+	msg1 = midi_channel + midi_program_change;
+	msg2 = data;
+	//printf("midi_tx program change: [%x][%d][%d]\n",msg1,msg2);
+	midisend(-1);
+);
+
+// Sets led 1-13 for encoder id (1-16) based on a float from 0.0 to 1.0
+function set_led_ring(id, normalized_value) (
+	led_value = (normalized_value*127);
+	send_cc(1,id+9,led_value);
+	//printf("set_led_ring: [%d][%d][%d]\n",msg1,msg2,msg3);
+);
+
+function set_fader_page(page)(
+  fader_page = page;
+  fader_page_led_offset = 8; // Start on the second row of buttons
+  sprintf(#str, "t/eos/fader/1/config/%d/10",fader_page);
+  oscsend(eos,#str);
+	oscsend(eos,"/eos/macro/fire", 810+(fader_page));
+
+
+  i = 1;
+  while(i <= max_fader_page)(
+    i == fader_page ? (
+      send_note_on(15, (i - 1) + fader_page_led_offset, 2);
+    ) : (
+      send_note_on(15, (i - 1) + fader_page_led_offset, 0);
+    );
+    i = i + 1;
+  );
+
+);
+
+function set_foot_sw_led(on) (
+	// set foot sw led
+	on  == 1 ? (
+		send_cc(16,42,127);
+
+	); 
+	on == 0 ? (
+		send_cc(16,42,0);
+		
+	);
+);
+function encoder_feedback(param,val) (
+	i = 1;
+	while(i < 17) (
+		
+		!strcmp(param,#parm[i]) ? (
+			value[i] = val;
+			set_led_ring(i, val);
+		);
+		i = i + 1;
+	);
+);
+
+// ######## Setup faders ########
+fader_page = 1;
+max_fader_page = 8;
+min_fader_page = 1;
+oscsend(eos,"t/eos/ping");
+set_fader_page(fader_page);
+
+// ######## Setup encoder parameters ########
+#parm[1] = "Red";
+#parm[2] = "Green";
+#parm[3] = "Blue";
+#parm[4] = "Cyan";
+#parm[5] = "Magenta";
+#parm[6] = "Yellow";
+#parm[7] = "Hue";
+#parm[8] = "Saturation";
+#parm[9] = "Intens";
+#parm[10] = "Zoom";
+#parm[11] = "Pan";
+#parm[12] = "Tilt";
+#parm[13] = "Edge";
+#parm[14] = "Iris";
+oscsend(eos,"f/eos/user", 1);
+
+function param_subscribe()(
+  i = 1;
+  while(i <= 14)(
+    sprintf(#oscstr,"f/eos/subscribe/param/%s",#parm[i]);
+    oscsend(eos,#oscstr, 1);
+    i = i + 1;
+  );
+);
+param_subscribe();
+
+// ######## Initialize encoder parameters and led rings ########
+value[i] = 0.0;
+i = 1;
+while(i <= 16)(
+	value[i] = 0.0;
+	send_cc(16,i+9,2);
+	set_led_ring(i, value[i]);
+	i += 1;
+);
+
+// ############## Timer Code ~executed every 10ms or so~ ################
+@timer
+ticks - delta_ticks >= 50 ? (
+	// set foot sw led
+  param_subscribe();
+  set_fader_page(fader_page);
+	i = 1;
+	toggle ? (
+		toggle = 0;
+		set_foot_sw_led(0);
+		
+	) : (
+		toggle = 1;
+		set_foot_sw_led(1);
+	);
+	delta_ticks = ticks;
+	//printf("tick: %d\n", time_precise());
+);
+ticks+= 1;
+
+// ######## OSC message parsing ########
+@oscmsg
+oscmatch("/eos/out/%s") ? (
+	oscmatch("/eos/out/color/hs") ? (
+		hue = oscparm(0)/360;
+		sat = oscparm(1)/100;
+		//printf("hue: %f, sat: %f\n", hue, sat);
+		encoder_feedback("hue", hue);
+		encoder_feedback("saturation", sat);
+	);
+
+	oscmatch("/eos/out/param/%s") ? (
+		param_value = oscparm(0);
+		param_min = oscparm(1);
+		param_max = oscparm(2);
+		range = param_max - param_min;
+		normalized_value = ((param_value - param_min)/range);	
+
+		//printf("parameter %s [%f-%f]: %f, normalized: %f\n", fmt0, param_min, param_max, param_value, normalized_value);
+		encoder_feedback(fmt0,normalized_value);
+	);
+);  
+oscmatch("/eos/fader/%d/%d") ? (
+	//printf("fader %d/%d: ", fmt0, fmt1);
+	fader_index = (fmt0-1)*10 + fmt1;
+	fader_value = oscparm(0);
+	
+	//fader[fader_index] != fader_value ? (
+	fader[fader_index] = fader_value;
+	
+	// Update Bank A
+	fader_index < 9 ? (
+		send_cc(1,fader_index,fader_value*127);	
+	);
+	fader_index == 9 ? (
+		send_cc(1,9,fader_value*127);	
+	);
+	
+	// Update Bank B
+	fader_index >= 28 && fader_index <= 36 ? (
+		send_cc(1,fader_index + 27,fader_value*127);	
+	);
+);
+
+
+// ######## MIDI message parsing ########
+@midimsg
+function set_param(i,ticks) (
+	sprintf(#osc, "f/eos/wheel/coarse/%s",#parm[i]);
+	//printf("set param: %s: %d\n",#parm[i], ticks);
+	oscsend(eos,#osc, ticks);
+);
+
+channel = msg1 & $x0f;
+command_code = msg1 & $xf0;
+
+printf("midi rx: [%x %d, %d]\n", msg1, msg2, msg3);
+
+command_code == midi_control_change ? (
+	// ######## Fader 1-8 Bank A ########
+	msg2 >= 1 && msg2 <= 8 ? (
+		index = msg2;
+		sprintf(#osc,"f/eos/fader/1/%d",msg2);
+		printf("fader 1/%d move\n", msg2);
+		oscsend(eos,#osc, msg3/127.0);
+		fader[index] = msg3/127.0;
+	);
+	// ######## Fader 9 Bank A ########
+	msg2 == 9 ? (
+		index = 9;
+		sprintf(#osc,"f/eos/fader/1/9");
+		printf("fader %d move\n", msg2);
+		oscsend(eos,#osc, msg3/127.0);
+		fader[9] = msg3/127.0;
+	);
+	// ######## Encoder 1-14 Bank A ########
+  // Sets the defined parameter
+	msg2 >= 10 && msg2 <= 23 ? (
+		//msg3 = 0;
+		//midisend(-1);
+		
+		index = msg2 - 9;
+		set_param(index, msg3-64);
+		set_led_ring(index, value[index]);
+	);
+  
+  // ######## Encoder 15 Bank A ########
+  // Changes fader page
+	msg2 == 24 ? (
+    direction = msg3-64;
+
+    direction > 0 ? (
+      // Clockwise
+      fader_page < max_fader_page ? (
+        fader_page = fader_page + 1;
+        set_fader_page(fader_page);
+      );
+    ) : (
+      // Counter-Clockwise
+      fader_page > min_fader_page ? (
+        fader_page = fader_page - 1;
+        set_fader_page(fader_page);
+      );
+
+    );
+		//set_param(index, msg3-64);
+		//set_led_ring(index, value[index]);
+	);
+  // ######## Encoder 16 Bank A ########
+  msg2 == 25 ? (
+    direction = msg3-64;
+    direction > 0 ? (
+      oscsend(eos,"t/eos/key/next");
+    ) : (
+      oscsend(eos,"t/eos/key/last");
+    );
+  );
+
+
+	// ######## Expression Pedal Bank A ########
+	// msg2 == 26 ? ();
+	// ######## Footswitch  Bank A ########
+	// msg2 == 27 ? ();
+	
+	
+	// ######## Fader 1-8 Bank B ########
+	msg2 >= 28 && msg2 <= 35 ? (
+		index = msg2;
+		sprintf(#osc,"f/eos/fader/2/%d",msg2-27);
+		printf("fader 2/%d move\n", msg2-27);
+		oscsend(eos,#osc, msg3/127.0);
+		fader[index] = msg3/127.0;
+	);
+	// ######## Fader 9 Bank B ########
+	msg2 == 36 ? (
+
+		sprintf(#osc,"f/eos/fader/2/9");
+		printf("fader %d move\n", msg2);
+		oscsend(eos,#osc, msg3/127.0);
+		fader[19] = msg3/127.0;
+	);
+	
+	msg2 >= 37 && msg2 <= 52 ? (
+		index = msg2 - 20;
+		printf("encoder turn: %d at %d\n", index, msg3);
+		set_param(index, msg3-64);
+		msg3 = value[index] * 127;
+		midisend(-1);
+		//set_led_ring(msg2-9, 0);
+	);
+	// ######## Expression Pedal Bank A ########
+	// msg2 == 37 ? ();
+	// ######## Footswitch  Bank A ########
+	// msg2 == 38 ? ();
+);
+
+command_code == midi_note_on || command_code == midi_note_off ? (
+	// Encoder Push 1-14
+	offset = 0;
+	msg2 >= offset && msg2 <= (offset + 13) ? (
+    msg1 == midi_note_on ? (
+      index = (msg2 - offset + 1);
+		  oscsend(eos, "s/eos/cmd", #parm[index]);
+    );
+	);
+	// Button 1-8 (Note 16-23)
+	offset = 16;
+	msg2 >= offset && msg2 <= (offset + 7) ? (
+    msg1 == midi_note_on ? (
+		  oscsend(eos,"/eos/macro/fire", 801+(msg2-offset));
+    );
+	);
+	// Button 9-16 (Load)
+	offset = 24; 
+	msg2 >= offset && msg2 <= (offset + 7) ? (
+    msg1 == midi_note_on ? (
+		  sprintf(#osc,"t/eos/fader/1/%d/load", msg2-offset + 1);
+		  oscsend(eos,#osc);
+    );
+	);
+	// Button 17-24 (Stop)
+	offset = 32;
+	msg2 >= offset && msg2 <= offset + 7 ? (
+		sprintf(#osc,"f/eos/fader/1/%d/stop", msg2-offset + 1);
+		msg1 == midi_note_on ? (
+			oscsend(eos,#osc, 1.0);
+		);
+		msg1 == midi_note_off ?  (
+			oscsend(eos,#osc, 0.0);
+		);
+	);
+	// Button 25-33 (Bump)
+	offset = 40;
+	msg2 >= offset && msg2 <= offset + 8 ? (
+		sprintf(#osc,"f/eos/fader/1/%d/fire", msg2-offset + 1);
+		msg1 == midi_note_on ? (
+			oscsend(eos,#osc, 1.0);
+		);
+		msg1 == midi_note_off ?  (
+			oscsend(eos,#osc, 0.0);
+		);
+		
+	);
+	// Button 34-39
+  msg1 == midi_note_on ? (
+    msg2 == 49 ? ( oscsend(eos,"t/eos/key/Select_Last"); );
+    msg2 == 50 ? ( oscsend(eos,"t/eos/key/Select_Manual"); );
+    msg2 == 51 ? ( oscsend(eos,"t/eos/key/Update"); );
+    msg2 == 52 ? ( oscsend(eos,"t/eos/key/Record"); );
+    msg2 == 53 ? ( oscsend(eos,"t/eos/key/At"); );
+    msg2 == 54 ? ( oscsend(eos,"t/eos/key/Enter"); );
+  );
+);
