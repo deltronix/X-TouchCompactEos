@@ -1,6 +1,5 @@
-# OSCII-bot script for interfacing between Behringer X-Touch devices and ETC Eos software
-
-
+# OSCII-bot script for interfacing between Behringer X-Touch Compact devices and ETC Eos software
+Just a little script I made :) Of course usage is entirely at your own risk.
 
 ## Setup
  - Enable OSC Show Control in the EOS software: Set UDP RX Port to 8000, UDP TX Port to 8001 and UDP TX Ip Address to 127.0.0.1 (if you are running oscii-bot locally).
