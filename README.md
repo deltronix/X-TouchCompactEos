@@ -2,6 +2,7 @@
 Just a little script I made :) Of course usage is entirely at your own risk.
 
 ## Setup
+ - Install OSCII-bot: [https://www.cockos.com/oscii-bot/]
  - Enable OSC Show Control in the EOS software: Set UDP RX Port to 8000, UDP TX Port to 8001 and UDP TX Ip Address to 127.0.0.1 (if you are running oscii-bot locally).
  - Load the eos_a.bin and eos_b.bin files into the X-Touch with the X-Touch Editor Software.
  - Put eos.txt in your "C:\Users\%UserName%\AppData\Roaming\oscii-bot\" folder
@@ -10,9 +11,10 @@ Just a little script I made :) Of course usage is entirely at your own risk.
  - Start the ETC Eos software and enjoy this physical interface
 
 ## Mapping:
-By default the X-Touch is mapped as described below. Do keep in mind that this script fires Macro 811 - 818 when changing fader pages! I use this to switch views in a magic sheet that displays the fader contents
+By default the X-Touch is mapped as described below. Do keep in mind that this script fires Macro 811 - 818 when changing fader pages! I use this to switch views in a magic sheet that displays the fader contents. The accompanying test showfile demonstrates this.
 
- > !IMPORTANT Do not use Bank B! It is not finished and behaviour is not necessarily defined. If you implement some useful behaviour for Bank B feel free to submit it as a pull request though :) The issue is mostly that bank changes are not reported through MIDI. As a work around I now periodically update at least the fader positions (which are the same as Bank A for now).
+ > !IMPORTANT Do not use Bank B! It is not finished and behaviour is not necessarily defined. If you implement some useful behaviour for Bank B feel free to submit it as a pull request though :) The issue is mostly that bank changes are not reported through MIDI.
+ > At start up, if a fader seems glitchy, switch to bank B and back to A.. I'm not really sure why this happens, but after doing this everything seems stable.  
 
 ### Buttons:
  - Button row 1 is mapped to Macro 801-808
